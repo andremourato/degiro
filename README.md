@@ -1,0 +1,2 @@
+# degiro
+Degiro history parser
