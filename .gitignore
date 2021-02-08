@@ -46,7 +46,7 @@ typings/
 .npm
 
 #output
-output.json
+*.json
 
 # Optional eslint cache
 .eslintcache
