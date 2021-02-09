@@ -21,6 +21,10 @@ class Degiro:
         self.__currency_exchange = None
         self.__history = []
 
+
+    '''
+    Public methods
+    '''
     #queries the existing information
     def query(query_type,query_date=datetime.now()):
         trans_date = datetime.strptime(trans['date'], '%d-%m-%Y %H:%M:%S')
@@ -64,11 +68,42 @@ class Degiro:
 
         self.create_history(filename)
 
+        exchange_aux = None
         for transaction in self.__history:
 
             trans = self.get_transaction_info(transaction)
             if trans:
-                self.transactions.append(trans)
+                if trans.type == TransactionType.CURRENCY_EXCHANGE_OUTFLOW:
+                    if not exchange_aux:
+                        exchange_aux = trans
+                    else:
+                        self.transactions.append(
+                            TransactionExchange(
+                                trans.date,
+                                exchange_aux.currency,
+                                exchange_aux.amount,
+                                trans.currency,
+                                trans.amount
+                            )
+                        )
+                        exchange_aux = None
+                
+                elif trans.type == TransactionType.CURRENCY_EXCHANGE_INFLOW:
+                    if not exchange_aux:
+                        exchange_aux = trans
+                    else:
+                        self.transactions.append(
+                            TransactionExchange(
+                                trans.date,
+                                trans.currency,
+                                trans.amount,
+                                exchange_aux.currency,
+                                exchange_aux.amount
+                            )
+                        )
+                        exchange_aux = None
+                else:
+                    self.transactions.append(trans)
 
 
     '''
@@ -107,50 +142,53 @@ class Degiro:
         if transaction['Montante'] != '':
             transaction['Montante'] = float(transaction['Montante'].replace(',','.'))
 
-            if  description == 'Flatex Cash Sweep Transfer' or description == 'Degiro Cash Sweep Transfer':
-                return {
-                    'type': TransactionType.DEGIRO_CASH_SWEEP,
-                    'date': date,
-                    'currency': transaction['Mudança'],
-                    'amount':transaction['Montante']
-                }
+            if  description == 'Flatex Cash Sweep Transfer' or\
+                description == 'Degiro Cash Sweep Transfer':
+                return TransactionCashSweep(
+                    tdate=date,
+                    tcurrency=transaction['Mudança'],
+                    tamount=transaction['Montante'],
+                )
 
             # When the new currency is credited to the account
-            elif description == 'Crédito de divisa':
-                return {
-                    'type': TransactionType.CURRENCY_EXCHANGE_CREDIT,
-                    'date': date,
-                    'currency': transaction['Mudança'],
-                    'amount':transaction['Montante']
-                }
+            if description == 'Crédito de divisa':
+                return TransactionExchangeOutflow(
+                    tdate=date,
+                    tcurrency=transaction['Mudança'],
+                    tamount=transaction['Montante'],
+                )
 
             #When the old currency is deducted from the account
-            elif description == 'Levantamento de divisa':
-                return {
-                    'type': TransactionType.CURRENCY_EXCHANGE_DEDUCTION,
-                    'date': date,
-                    'currency': transaction['Mudança'],
-                    'amount':transaction['Montante']
-                }
+            if description == 'Levantamento de divisa':
+                return TransactionExchangeInflow(
+                    tdate=date,
+                    tcurrency=transaction['Mudança'],
+                    tamount=transaction['Montante'],
+                )
 
             # Tracks degiro's commissions
-            elif description == 'Comissão de transação':
-                return {
-                    'type': TransactionType.DEGIRO_TRANSACTION_COMISSION,
-                    'date': date,
-                    'currency': transaction['Mudança'],
-                    'amount':transaction['Montante']
-                }
+            if description == 'Comissão de transação':
+                return TransactionComission(
+                    tdate=date,
+                    tcurrency=transaction['Mudança'],
+                    tamount=transaction['Montante'],
+                )
             
             # degiro's commission for connecting to the stock exchanges
-            elif 'Custo de Conectividade' in description:
-                return {
-                    'type': TransactionType.DEGIRO_CONNECTIVITY_COST,
-                    'date': date,
-                    'currency': transaction['Mudança'],
-                    'amount':transaction['Montante'],
-                    'exchange': description[description.find("(")+1:description.find(")")]
-                }
+            if 'Custo de Conectividade' in description:
+                return TransactionConnectivityCost(
+                    tdate=date,
+                    tcurrency=transaction['Mudança'],
+                    tamount=transaction['Montante'],
+                    texchange=description[description.find("(")+1:description.find(")")]
+                )
+
+            if 'deposit' in description.lower() or 'depósito' in description.lower():
+                return Deposit(
+                    tdate=date,
+                    tcurrency=transaction['Mudança'],
+                    tamount=transaction['Montante']
+                )
 
             # Buying shares transaction
             isin = description[description.rfind("(")+1:description.rfind(")")]
@@ -158,7 +196,7 @@ class Degiro:
             if len(lst) > 0: #it's a buy transaction
                 lst = lst[0]
                 info = lst[0].split()
-                return  TransactionBuyShares(
+                return TransactionBuyShares(
                     tdate=date,
                     tshares=int(info[0]),
                     tprice=float(lst[1].replace(',','.')),
