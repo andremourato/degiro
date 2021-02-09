@@ -1,6 +1,8 @@
 import csv
 import json
 from enum  import Enum
+from datetime import datetime
+
 
 #file imports
 from figi import *
@@ -26,6 +28,8 @@ class Degiro:
         self.history = []
         self.tickers = {}
         self.exchanges = []
+        self.connectivity_costs = []
+        self.comissions = []
         # auxiliar variables
         self.__jobs = []
         self.__currency_exchange = None
@@ -36,7 +40,7 @@ class Degiro:
         self.__jobs.clear()
         self.tickers.update(ticker_info)
 
-    def load_file(self,filename):
+    def create_history(self,filename):
         isin_seen = set()
         #Does a first iteration because the algorithm needs to fetch
         # the tickers first. Only then can it start to calculate all the metrics
@@ -54,21 +58,15 @@ class Degiro:
             if len(self.__jobs) > 0:
                 self.get_ticker_info()
 
-        
-        #####TODO: REMOVE LATER############
-        with open('output_tickers.json', 'w') as outfile1:
-            json.dump(self.tickers, outfile1, indent=4)
-        
-        with open('output_history.json', 'w') as outfile2:
-            json.dump(self.history, outfile2, indent=4)
-        #################################
+    def load_file(self,filename):
 
-        comissions = 0
+        self.create_history(filename)
+
         for transaction in self.history:
 
             trans = self.get_transaction_info(transaction)
-            print(trans)
             if trans:
+                trans_date = datetime.strptime(trans['date'], '%d-%m-%Y %H:%M:%S')
                 if trans['type'] == Degiro.TransactionType.CURRENCY_EXCHANGE_CREDIT:
                     if self.__currency_exchange:
                         self.exchanges.append({
@@ -94,18 +92,25 @@ class Degiro:
                         self.__currency_exchange = None
                     else:
                         self.__currency_exchange = trans
-        
-        with open('output_exchanges.json', 'w') as outfile1:
-            json.dump(self.exchanges, outfile1, indent=4)
-        #print('Exchanges',self.exchanges)
+                
+                elif trans['type'] == Degiro.TransactionType.DEGIRO_TRANSACTION_COMISSION:
+                    query_date = datetime.strptime('31-12-2020 23:59:59','%d-%m-%Y %H:%M:%S')
+                    self.comissions.append(trans)
+                
+                elif trans['type'] == Degiro.TransactionType.DEGIRO_CONNECTIVITY_COST:
+                    self.connectivity_costs.append(trans)        
+            
 
     def get_transaction_info(self,transaction):
         description = transaction['Descrição']
+        date = '%s %s:00' % (transaction['Data'],transaction['Hora'])
         if transaction['Montante'] != '':
+            transaction['Montante'] = float(transaction['Montante'].replace(',','.'))
+
             if  description == 'Flatex Cash Sweep Transfer' or description == 'Degiro Cash Sweep Transfer':
                 return {
                     'type': Degiro.TransactionType.DEGIRO_CASH_SWEEP,
-                    'date': '%s %s' % (transaction['Data'],transaction['Hora']),
+                    'date': date,
                     'currency': transaction['Mudança'],
                     'amount':transaction['Montante']
                 }
@@ -114,7 +119,7 @@ class Degiro:
             elif description == 'Crédito de divisa':
                 return {
                     'type': Degiro.TransactionType.CURRENCY_EXCHANGE_CREDIT,
-                    'date': '%s %s' % (transaction['Data'],transaction['Hora']),
+                    'date': date,
                     'currency': transaction['Mudança'],
                     'amount':transaction['Montante']
                 }
@@ -123,7 +128,7 @@ class Degiro:
             elif description == 'Levantamento de divisa':
                 return {
                     'type': Degiro.TransactionType.CURRENCY_EXCHANGE_DEDUCTION,
-                    'date': '%s %s' % (transaction['Data'],transaction['Hora']),
+                    'date': date,
                     'currency': transaction['Mudança'],
                     'amount':transaction['Montante']
                 }
@@ -132,10 +137,19 @@ class Degiro:
             elif description == 'Comissão de transação':
                 return {
                     'type': Degiro.TransactionType.DEGIRO_TRANSACTION_COMISSION,
-                    'date': '%s %s' % (transaction['Data'],transaction['Hora']),
+                    'date': date,
                     'currency': transaction['Mudança'],
                     'amount':transaction['Montante']
                 }
-        
-
+            
+            # degiro's commission for connecting to the stock exchanges
+            elif 'Custo de Conectividade' in description:
+                return {
+                    'type': Degiro.TransactionType.DEGIRO_CONNECTIVITY_COST,
+                    'date': date,
+                    'currency': transaction['Mudança'],
+                    'amount':transaction['Montante'],
+                    'exchange': description[description.find("(")+1:description.find(")")]
+                }
+    
 
