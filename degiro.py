@@ -1,29 +1,13 @@
 import csv
 import json
 import re
-from enum  import Enum
 from datetime import datetime
-
 
 #file imports
 from figi import *
+from transactions import *
 
 class Degiro:
-
-    class TransactionType(int, Enum):
-        SELL_SHARES = 1 # Venda x FACEBOOK@300
-        BUY_SHARES = 2 # Compra x FACEBOOK@200
-        FLATEX_INTEREST = 3 #Flatex Interest
-        FLATEX_INTEREST_INCOME = 4 #Flatex Interest Income
-        CURRENCY_EXCHANGE_DEDUCTION = 5 # Levantamento de divisa | Crédito de divisa
-        CURRENCY_EXCHANGE_CREDIT = 6 # Levantamento de divisa | Crédito de divisa
-        DEGIRO_TRANSACTION_COMISSION = 7 # Comissão de transação
-        DEGIRO_CONNECTIVITY_COST = 8 #Custo de Conectividade DEGIRO 2021 
-        DEGIRO_CASH_SWEEP = 9 #Degiro Cash Sweep Transfer | #Flatex Cash Sweep Transfer
-        DEPOSIT = 10 #flatex Deposit
-        WITHDRAWAL = 11 #Withdrawal
-        DIVIDEND = 12 # Dividendo
-        DIVIDEND_TAX = 13 #Imposto sobre dividendo
 
     def __init__(self):
         self.transactions = []
@@ -40,7 +24,7 @@ class Degiro:
     #queries the existing information
     def query(query_type,query_date=datetime.now()):
         trans_date = datetime.strptime(trans['date'], '%d-%m-%Y %H:%M:%S')
-        if trans['type'] == Degiro.TransactionType.CURRENCY_EXCHANGE_CREDIT:
+        if trans['type'] == TransactionType.CURRENCY_EXCHANGE_CREDIT:
             if self.__currency_exchange:
                 self.exchanges.append({
                     'date': trans['date'],
@@ -53,7 +37,7 @@ class Degiro:
             else:
                 self.__currency_exchange = trans
 
-        elif trans['type'] == Degiro.TransactionType.CURRENCY_EXCHANGE_DEDUCTION:
+        elif trans['type'] == TransactionType.CURRENCY_EXCHANGE_DEDUCTION:
             if self.__currency_exchange:
                 self.exchanges.append({
                     'date': trans['date'],
@@ -66,14 +50,14 @@ class Degiro:
             else:
                 self.__currency_exchange = trans
         
-        elif trans['type'] == Degiro.TransactionType.DEGIRO_TRANSACTION_COMISSION:
+        elif trans['type'] == TransactionType.DEGIRO_TRANSACTION_COMISSION:
             query_date = datetime.strptime('31-12-2020 23:59:59','%d-%m-%Y %H:%M:%S')
             self.comissions.append(trans)
         
-        elif trans['type'] == Degiro.TransactionType.DEGIRO_CONNECTIVITY_COST:
+        elif trans['type'] == TransactionType.DEGIRO_CONNECTIVITY_COST:
             self.connectivity_costs.append(trans)     
 
-        elif trans['type'] == Degiro.TransactionType.BUY_SHARES:
+        elif trans['type'] == TransactionType.BUY_SHARES:
             pass
 
     def load_file(self,filename):
@@ -125,7 +109,7 @@ class Degiro:
 
             if  description == 'Flatex Cash Sweep Transfer' or description == 'Degiro Cash Sweep Transfer':
                 return {
-                    'type': Degiro.TransactionType.DEGIRO_CASH_SWEEP,
+                    'type': TransactionType.DEGIRO_CASH_SWEEP,
                     'date': date,
                     'currency': transaction['Mudança'],
                     'amount':transaction['Montante']
@@ -134,7 +118,7 @@ class Degiro:
             # When the new currency is credited to the account
             elif description == 'Crédito de divisa':
                 return {
-                    'type': Degiro.TransactionType.CURRENCY_EXCHANGE_CREDIT,
+                    'type': TransactionType.CURRENCY_EXCHANGE_CREDIT,
                     'date': date,
                     'currency': transaction['Mudança'],
                     'amount':transaction['Montante']
@@ -143,7 +127,7 @@ class Degiro:
             #When the old currency is deducted from the account
             elif description == 'Levantamento de divisa':
                 return {
-                    'type': Degiro.TransactionType.CURRENCY_EXCHANGE_DEDUCTION,
+                    'type': TransactionType.CURRENCY_EXCHANGE_DEDUCTION,
                     'date': date,
                     'currency': transaction['Mudança'],
                     'amount':transaction['Montante']
@@ -152,7 +136,7 @@ class Degiro:
             # Tracks degiro's commissions
             elif description == 'Comissão de transação':
                 return {
-                    'type': Degiro.TransactionType.DEGIRO_TRANSACTION_COMISSION,
+                    'type': TransactionType.DEGIRO_TRANSACTION_COMISSION,
                     'date': date,
                     'currency': transaction['Mudança'],
                     'amount':transaction['Montante']
@@ -161,7 +145,7 @@ class Degiro:
             # degiro's commission for connecting to the stock exchanges
             elif 'Custo de Conectividade' in description:
                 return {
-                    'type': Degiro.TransactionType.DEGIRO_CONNECTIVITY_COST,
+                    'type': TransactionType.DEGIRO_CONNECTIVITY_COST,
                     'date': date,
                     'currency': transaction['Mudança'],
                     'amount':transaction['Montante'],
@@ -174,31 +158,21 @@ class Degiro:
             if len(lst) > 0: #it's a buy transaction
                 lst = lst[0]
                 info = lst[0].split()
-                return {
-                    'type': Degiro.TransactionType.BUY_SHARES,
-                    'date': date,
-                    'share':info[0],
-                    'price':lst[1].replace(',','.'),
-                    'ticker':self.__isin_ticker[isin]
-                }
+                return  TransactionBuyShares(
+                    tdate=date,
+                    tshares=int(info[0]),
+                    tprice=float(lst[1].replace(',','.')),
+                    tticker=self.__isin_ticker[isin]
+                )
     
             # Selling shares transaction
             lst = re.compile('Venda (.*)@(.*) USD').findall(description)
             if len(lst) > 0: #it's a sell transaction
                 lst = lst[0]
                 info = lst[0].split()
-                print({
-                    'type': Degiro.TransactionType.SELL_SHARES,
-                    'date': date,
-                    'share':info[0],
-                    'price':lst[1].replace(',','.'),
-                    'ticker':self.__isin_ticker[isin]
-                })
-                return {
-                    'type': Degiro.TransactionType.SELL_SHARES,
-                    'date': date,
-                    'share':info[0],
-                    'price':lst[1].replace(',','.'),
-                    'ticker':self.__isin_ticker[isin]
-                }
-
+                return TransactionSellShares(
+                    tdate=date,
+                    tshares=int(info[0]),
+                    tprice=float(lst[1].replace(',','.')),
+                    tticker=self.__isin_ticker[isin]
+                )
