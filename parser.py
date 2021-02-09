@@ -33,11 +33,11 @@ def main():
     with open('output_exchanges.json', 'w') as outfile1:
         json.dump(degiro.exchanges, outfile1, indent=4)
         
-    with open('output_tickers.json', 'w') as outfile2:
-        json.dump(degiro.tickers, outfile2, indent=4)
+    with open('output_transactions.json', 'w') as outfile2:
+        json.dump(degiro.transactions, outfile2, indent=4)
     
-    with open('output_history.json', 'w') as outfile3:
-        json.dump(degiro.history, outfile3, indent=4)
+    # with open('output_history.json', 'w') as outfile3:
+    #     json.dump(degiro.history, outfile3, indent=4)
 
     with open('output_connectivity_costs.json', 'w') as outfile4:
         for elem in degiro.connectivity_costs:
