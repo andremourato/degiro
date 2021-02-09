@@ -11,10 +11,8 @@ class Degiro:
 
     def __init__(self):
         self.transactions = []
-        self.exchanges = []
         self.connectivity_costs = []
         self.comissions = []
-        self.companies = {}
         # auxiliar variables
         self.__isin_ticker = {}
         self.__jobs = []
@@ -26,43 +24,18 @@ class Degiro:
     Public methods
     '''
     #queries the existing information
-    def query(query_type,query_date=datetime.now()):
-        trans_date = datetime.strptime(trans['date'], '%d-%m-%Y %H:%M:%S')
-        if trans['type'] == TransactionType.CURRENCY_EXCHANGE_CREDIT:
-            if self.__currency_exchange:
-                self.exchanges.append({
-                    'date': trans['date'],
-                    'start_currency': self.__currency_exchange['currency'],
-                    'start_amount':self.__currency_exchange['amount'],
-                    'target_currency': trans['currency'],
-                    'target_amount':trans['amount']
-                })
-                self.__currency_exchange = None
-            else:
-                self.__currency_exchange = trans
+    def query(self,query_type,end_date=datetime.now(),start_date=None):
+        if not start_date:
+            start_date = datetime.utcfromtimestamp(0)
 
-        elif trans['type'] == TransactionType.CURRENCY_EXCHANGE_DEDUCTION:
-            if self.__currency_exchange:
-                self.exchanges.append({
-                    'date': trans['date'],
-                    'start_currency': trans['currency'],
-                    'start_amount':trans['amount'],
-                    'target_currency': self.__currency_exchange['currency'],
-                    'target_amount':self.__currency_exchange['amount']
-                })
-                self.__currency_exchange = None
-            else:
-                self.__currency_exchange = trans
-        
-        elif trans['type'] == TransactionType.DEGIRO_TRANSACTION_COMISSION:
-            query_date = datetime.strptime('31-12-2020 23:59:59','%d-%m-%Y %H:%M:%S')
-            self.comissions.append(trans)
-        
-        elif trans['type'] == TransactionType.DEGIRO_CONNECTIVITY_COST:
-            self.connectivity_costs.append(trans)     
+        print('Searching transactions of type %d from %s to %s...'%(query_type,str(start_date),str(end_date)))
+        result = []
+        for trans in self.transactions:
+            trans_date = datetime.strptime(trans['date'], '%d-%m-%Y %H:%M:%S')
+            if query_type == trans['type'] and start_date <= trans_date and trans_date <= end_date:
+                result.append(trans)
 
-        elif trans['type'] == TransactionType.BUY_SHARES:
-            pass
+        return result
 
     def load_file(self,filename):
 
