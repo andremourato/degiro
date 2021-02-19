@@ -1,26 +1,17 @@
 from enum  import Enum
 import json
+from datetime import datetime
 
 class Transaction:
     def __init__(self,t,d):
         self.type = t
-        self.date = d
+        self.date = datetime.strptime(d, '%d-%m-%Y %H:%M:%S')
 
-class TransactionBuyShares(Transaction,dict):
-    def __init__(self,tdate,tshares,tprice,tticker):
-        super().__init__(TransactionType.BUY_SHARES,tdate)
-        self.shares = tshares
-        self.pps = tprice #price per share
-        self.ticker = tticker
-        dict.__init__(self, self.__dict__)
-
-class TransactionSellShares(Transaction,dict):
-    def __init__(self,tdate,tshares,tprice,tticker):
-        super().__init__(TransactionType.SELL_SHARES,tdate)
-        self.shares = tshares
-        self.pps = tprice #price per share in euros
-        self.ticker = tticker
-        dict.__init__(self, self.__dict__)
+    def __repr__(self):
+        return {
+            'yyy': int(self.type),
+            'date': self.date.strftime('%d-%m-%Y %H:%M:%S')
+        }
 
 class TransactionConnectivityCost(Transaction,dict):
     def __init__(self,tdate,tcurrency,tamount,texchange):
@@ -46,6 +37,11 @@ class TransactionExchange(Transaction,dict):
         self.amount_out = tamountout 
         dict.__init__(self, self.__dict__)
 
+        def __repr__(self):
+            dic = self.super().__repr__()
+            dic.update(self.__dict__)
+            return str(dic)
+
 class TransactionExchangeInflow(Transaction,dict):
     def __init__(self,tdate,tcurrency,tamount):
         super().__init__(TransactionType.CURRENCY_EXCHANGE_INFLOW,tdate)
@@ -67,13 +63,51 @@ class TransactionCashSweep(Transaction,dict):
         self.amount = tamount #in euros
         dict.__init__(self, self.__dict__)
 
-class Deposit(Transaction,dict):
+class TransactionDeposit(Transaction,dict):
     def __init__(self,tdate,tcurrency,tamount):
         super().__init__(TransactionType.DEPOSIT,tdate)
         self.currency = tcurrency
         self.amount = tamount #in euros
         dict.__init__(self, self.__dict__)
 
+class TransactionBuyShares(Transaction,dict):
+    def __init__(self,tdate,tshares,tprice,tticker):
+        super().__init__(TransactionType.BUY_SHARES,tdate)
+        self.shares = tshares
+        self.pps = tprice #price per share
+        self.ticker = tticker
+        dict.__init__(self, self.__dict__)
+
+class TransactionSellShares(Transaction,dict):
+    def __init__(self,tdate,tshares,tprice,tticker):
+        super().__init__(TransactionType.SELL_SHARES,tdate)
+        self.shares = tshares
+        self.pps = tprice #price per share in euros
+        self.ticker = tticker
+        dict.__init__(self, self.__dict__)
+
+class Position(dict):
+    
+    def __init__(self,pticker,pshares=0,ppps=0,prealized=0, punrealized=0):
+        self.ticker = pticker
+        self.shares = pshares
+        self.pps = ppps
+        self.realized = prealized
+        self.unrealized = punrealized
+
+    def buy_shares(self, trans : TransactionBuyShares):
+        self.pps = (trans.shares*trans.pps+self.shares*self.pps)/(self.shares+trans.shares)
+        self.shares += trans.shares
+
+    def sell_shares(self, trans : TransactionSellShares):
+        self.shares -= trans.shares
+        self.realized += (trans.pps-self.pps)*trans.shares
+
+    def __str__(self):
+        dict.__init__(self, self.__dict__)
+        return str(self.__dict__)
+        
+    __repr__ = __str__
 
 class TransactionType(int, Enum):
     SELL_SHARES = 1 # Venda x FACEBOOK@300
