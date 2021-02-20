@@ -86,29 +86,6 @@ class TransactionSellShares(Transaction,dict):
         self.ticker = tticker
         dict.__init__(self, self.__dict__)
 
-class Position(dict):
-    
-    def __init__(self,pticker,pshares=0,ppps=0,prealized=0, punrealized=0):
-        self.ticker = pticker
-        self.shares = pshares
-        self.pps = ppps
-        self.realized = prealized
-        self.unrealized = punrealized
-
-    def buy_shares(self, trans : TransactionBuyShares):
-        self.pps = (trans.shares*trans.pps+self.shares*self.pps)/(self.shares+trans.shares)
-        self.shares += trans.shares
-
-    def sell_shares(self, trans : TransactionSellShares):
-        self.shares -= trans.shares
-        self.realized += (trans.pps-self.pps)*trans.shares
-
-    def __str__(self):
-        dict.__init__(self, self.__dict__)
-        return str(self.__dict__)
-        
-    __repr__ = __str__
-
 class TransactionType(int, Enum):
     SELL_SHARES = 1 # Venda x FACEBOOK@300
     BUY_SHARES = 2 # Compra x FACEBOOK@200

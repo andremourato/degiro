@@ -20,9 +20,11 @@ def main():
     #    #end_date=datetime.strptime('31-12-1998 23:23:00', '%d-%m-%Y %H:%M:%S')
     #)
 
-    result = degiro.get_positions(open_only=True)
-    #print(result)
-    print(result['AAPL'].pps)
+    result = degiro.get_positions(
+        open_only=False,
+        #date=datetime.strptime('31-12-2020 23:59:00', '%d-%m-%Y %H:%M:%S')
+    )
+    
     pp.pprint(result)
 
     # with open('result.json', 'w') as outfile:

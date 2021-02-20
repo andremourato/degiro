@@ -2,12 +2,43 @@ import csv
 import json
 import re
 from datetime import datetime
+import yfinance as yf
 
 #file imports
 from figi import *
 from transactions import *
 
+class CurrencyExchange:
+    from forex_python.converter import CurrencyRates
+    #initialized once to prevent desynchronization of values
+    USD_EUR_RATE = CurrencyRates().get_rate('USD', 'EUR') 
+
 class Degiro:
+    #static variables
+
+    class Position(dict):
+        def __init__(self,pticker,pshares=0,ppps=0,prealized=0, punrealized=0):
+            self.ticker = pticker
+            self.shares = pshares
+            self.pps = ppps
+            self.realized = prealized
+            self.unrealized = punrealized
+
+        def buy_shares(self, trans : TransactionBuyShares):
+            self.pps = (trans.shares*trans.pps+self.shares*self.pps)/(self.shares+trans.shares)
+            self.shares += trans.shares
+
+        def sell_shares(self, trans : TransactionSellShares):
+            self.shares -= trans.shares
+            self.realized += (trans.pps-self.pps)*trans.shares
+
+        def __str__(self):
+            self.__dict__['realized_eur'] = self.realized*CurrencyExchange.USD_EUR_RATE
+            self.__dict__['unrealized_eur'] = self.unrealized*CurrencyExchange.USD_EUR_RATE
+            dict.__init__(self, self.__dict__)
+            return str(self.__dict__)
+            
+        __repr__ = __str__
 
     def __init__(self):
         self.transactions = []
@@ -19,33 +50,9 @@ class Degiro:
         self.__currency_exchange = None
         self.__history = []
 
-
     '''
     Public methods
-    '''
-
-    # class Position:
-    #     def __init__(pticker,pshares=0,prealized=0, punrealized=0):
-    #         self.ticker = pticker
-    #         self.shares = pshares
-    #         self.realized = prealized
-    #         self.unrealized = punrealized
-
-    # class TransactionBuyShares(Transaction,dict):
-    #     def __init__(self,tdate,tshares,tprice,tticker):
-    #         super().__init__(TransactionType.BUY_SHARES,tdate)
-    #         self.shares = tshares
-    #         self.pps = tprice #price per share
-    #         self.ticker = tticker
-    #         dict.__init__(self, self.__dict__)
-
-    # class TransactionSellShares(Transaction,dict):
-    #     def __init__(self,tdate,tshares,tprice,tticker):
-    #         super().__init__(TransactionType.SELL_SHARES,tdate)
-    #         self.shares = tshares
-    #         self.pps = tprice #price per share in euros
-    #         self.ticker = tticker
-    #         dict.__init__(self, self.__dict__)
+    ''' 
 
     def get_positions(self,open_only=True,date=datetime.now()):
         result = {}
@@ -54,25 +61,50 @@ class Degiro:
                 if trans.type == TransactionType.BUY_SHARES:
                     tic = trans.ticker
                     if tic not in result:
-                        result[tic] = Position(tic)
+                        result[tic] = Degiro.Position(tic)
                     
                     #adds shares to the position
-                    #result[tic].shares += trans.shares
                     result[tic].buy_shares(trans)
 
                 if trans.type == TransactionType.SELL_SHARES:
                     tic = trans.ticker
                     if tic not in result:
-                        result[tic] = Position(tic)
+                        result[tic] = Degiro.Position(tic)
 
                     #removes shares from the position
-                    #result[tic].shares -= trans.shares
                     result[tic].sell_shares(trans)
                     if open_only and result[tic].shares == 0:
                         del result[tic]
+            else: #all the current transactions have been analysed
+                break
 
-        return result
+        total_realized = 0
+        total_unrealized = 0
+
+        #gets the current price of the tickers
+        tickers = list(result.keys())
+        today = datetime.now().strftime('%Y-%m-%d')
+        prices = self.get_price(tickers,pstart=today,pend=today)
+        print(prices)
+
+        for company in result.values():
+            total_realized += company.realized
+            company.unrealized = (prices[company.ticker]-company.pps)*company.shares
+            total_unrealized += company.unrealized
+
+
+        return {
+            'realized_usd': total_realized,
+            'unrealized_usd': total_unrealized,
+            'realized_eur': total_realized*CurrencyExchange.USD_EUR_RATE,
+            'unrealized_eur': total_unrealized*CurrencyExchange.USD_EUR_RATE,
+            'positions': result
+        }
         
+    
+    def get_price(self,tickers,pstart=datetime.now(),pend=datetime.now()):
+        df = yf.download(tickers, start=pstart, end=pend)['Close']
+        return {_:df[_][0] for _ in tickers}
 
     #queries the existing information
     def query(self,query_type,start_date=datetime.utcfromtimestamp(0),end_date=datetime.now()):
@@ -130,6 +162,7 @@ class Degiro:
     '''
     Private methods
     '''
+
     def get_ticker_info(self):
         raw = OpenFIGI.map_jobs(self.__jobs)
         i = 0
