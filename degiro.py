@@ -56,8 +56,13 @@ class Degiro:
 
     def get_positions(self,open_only=True,date=datetime.now()):
         result = {}
+        commissions = 0
+        deposits = 0
         for trans in self.transactions:
             if trans.date <= date:
+                if trans.type == TransactionType.DEPOSIT:
+                    deposits += trans.amount
+
                 if trans.type == TransactionType.BUY_SHARES:
                     tic = trans.ticker
                     if tic not in result:
@@ -98,7 +103,8 @@ class Degiro:
             'unrealized_usd': total_unrealized,
             'realized_eur': total_realized*CurrencyExchange.USD_EUR_RATE,
             'unrealized_eur': total_unrealized*CurrencyExchange.USD_EUR_RATE,
-            'positions': result
+            'positions': result,
+            'deposits': deposits,
         }
         
     
